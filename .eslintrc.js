@@ -23,5 +23,7 @@ module.exports = {
     '@typescript-eslint/no-explicit-any': 'off',
     // remove comma at the end of the line
     'comma-dangle': ['error', 'always-multiline'],
+    'semi': ['error', 'never'],
+    
   },
 }

@@ -1,8 +1,8 @@
-import { Module, Global } from '@nestjs/common';
-import { HttpModule } from '@nestjs/axios';
-import { ConfigModule } from '@nestjs/config';
-import { CacheModule } from '@nestjs/cache-manager';
-import { redisStore } from 'cache-manager-redis-yet';
+import { Module, Global } from '@nestjs/common'
+import { HttpModule } from '@nestjs/axios'
+import { ConfigModule, ConfigService } from '@nestjs/config'
+import { CacheModule } from '@nestjs/cache-manager'
+import { redisStore } from 'cache-manager-redis-store'
 
 @Global()
 @Module({
@@ -16,16 +16,21 @@ import { redisStore } from 'cache-manager-redis-yet';
       envFilePath:
         process.env.NODE_ENV === 'production' ? '.env' : '.env.development',
     }),
-    CacheModule.registerAsync({
+    CacheModule.registerAsync<any>({
       isGlobal: true,
-      useFactory: async () => ({
-        store: await redisStore({
-          socket: {
-            host: 'localhost',
-            port: 6379,
-          },
-        }),
-      }),
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: async (configService: ConfigService) => {
+        const host = configService.get('REDIS_HOST')
+        const port = configService.get('REDIS_PORT')
+
+        const storeConfig = {
+          url: `redis://${host}:${port}`,
+        }
+
+        const store = await redisStore(storeConfig)
+        return { store: () => store }
+      },
     }),
   ],
   exports: [HttpModule, CacheModule],

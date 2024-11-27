@@ -1,5 +1,5 @@
-import { Controller, Get, Param } from '@nestjs/common';
-import { MusicsService } from './musics.service';
+import { Controller, Get, Param } from '@nestjs/common'
+import { MusicsService } from './musics.service'
 
 @Controller('musics')
 export class MusicsController {
@@ -7,7 +7,6 @@ export class MusicsController {
 
   @Get()
   findOne(@Param('query') query: string) {
-    return this.musicsService.findByQuery(query);
+    return this.musicsService.findByQuery(query)
   }
-  
 }

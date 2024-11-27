@@ -1,25 +1,38 @@
-import { Injectable, Inject } from '@nestjs/common';
-import { Music } from 'src/musics/entities/music.entity';
-import { CacheStore } from '@nestjs/cache-manager';
-import { Room } from './entities/room.entity';
+import { CreateRoomDto } from './dto/create-room.dto'
+import { Injectable, Inject } from '@nestjs/common'
+import { Music } from 'src/musics/entities/music.entity'
+import { CACHE_MANAGER } from '@nestjs/cache-manager'
+import { Room } from './entities/room.entity'
+import { Cache } from 'cache-manager'
+import { UpdateRoomDto } from './dto/update-room.dto'
 
 @Injectable()
 export class RoomsService {
   constructor(
-    @Inject('CACHE_MANAGER') private readonly cacheManager: CacheStore, // Inject the cache manager
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache, // Inject the cache manager
   ) {}
 
   private getRoomKey(roomId: string): string {
-    return `room:${roomId}`; // Unique key for the room in Redis
+    return `room:${roomId}` // Unique key for the room in Redis
   }
 
   // Create a new room in Redis (as cache)
-  async createRoom(host: string, password: string): Promise<string> {
-    const roomId = `${Date.now()}`; // Unique room ID (based on timestamp)
-    const roomKey = this.getRoomKey(roomId);
+  async createRoom(payload: CreateRoomDto): Promise<string> {
+    if (!payload.host) {
+      throw new Error('Host is required to create a room')
+    }
 
-    const roomData = {
-      host,
+    const existRoom = await this.getRoomByHost(payload.host)
+    if (existRoom) {
+      throw new Error('You already have a room')
+    }
+
+    const roomId = `${Date.now()}`
+    const roomKey = this.getRoomKey(roomId)
+
+    const roomData: Room = {
+      id: roomId,
+      host: payload.host,
       currentListeners: 0,
       currentMusic: null,
       queues: [],
@@ -27,107 +40,172 @@ export class RoomsService {
         music: {
           loop: false,
           shuffle: false,
-          volume: 50, // Default volume
+          volume: 50,
         },
         room: {
-          password,
+          password: payload.password || null,
           allowAnyoneControl: false,
         },
       },
-    };
+    }
 
-    // Save the room data in Redis (Cache)
-    await this.cacheManager.set(roomKey, roomData, { ttl: 0 }); // No TTL for now, can be adjusted
+    await this.cacheManager.set(roomKey, roomData, 0)
+    return roomId
+  }
 
-    return roomId;
+  async deleteRoom(roomId: string): Promise<void> {
+    const roomKey = this.getRoomKey(roomId)
+    await this.cacheManager.del(roomKey)
+  }
+
+  async deleteAllRooms(): Promise<void> {
+    const roomKeys = await this.cacheManager.store.keys('room:*')
+    for (const roomKey of roomKeys) {
+      await this.cacheManager.del(roomKey)
+    }
   }
 
   // Get room by ID from Redis
   async getRoomById(roomId: string): Promise<any> {
-    const roomKey = this.getRoomKey(roomId);
-    const roomData = (await this.cacheManager.get(roomKey)) as Room;
+    const roomKey = this.getRoomKey(roomId)
+    const roomData = (await this.cacheManager.get(roomKey)) as Room
 
     if (!roomData || !roomData.host) {
-      throw new Error(`Room with ID ${roomId} not found`);
+      throw new Error(`Room with ID ${roomId} not found`)
     }
 
-    return roomData;
+    return roomData
+  }
+
+  async getRoomByHost(host: string): Promise<Room | null> {
+    const roomKeys = await this.cacheManager.store.keys('room:*')
+
+    for (const roomKey of roomKeys) {
+      const roomData = (await this.cacheManager.get(roomKey)) as Room
+      if (roomData?.host === host) {
+        return roomData
+      }
+    }
+
+    return null
+  }
+
+  async getAllRooms(): Promise<Room[]> {
+    const roomKeys = await this.cacheManager.store.keys('room:*')
+    const rooms: Room[] = []
+
+    for (const roomKey of roomKeys) {
+      const roomData = (await this.cacheManager.get(roomKey)) as Room
+      rooms.push(roomData)
+    }
+
+    return rooms
   }
 
   // Update room settings in Redis
-  async updateRoomSettings(
-    roomId: string,
-    settings: Partial<any>,
-  ): Promise<any> {
-    const roomKey = this.getRoomKey(roomId);
-    const roomData = await this.getRoomById(roomId);
+  async updateRoomSettings(payload: UpdateRoomDto): Promise<any> {
+    const { roomId, settings } = payload
+
+    const roomKey = this.getRoomKey(roomId)
+    const roomData = await this.getRoomById(roomId)
 
     // Merge the new settings with the existing ones
-    const updatedSettings = { ...roomData.settings, ...settings };
-    roomData.settings = updatedSettings;
+    const updatedSettings = { ...roomData.settings, ...settings }
+    roomData.settings = updatedSettings
 
     // Save the updated room data back in Redis
-    await this.cacheManager.set(roomKey, roomData);
+    await this.cacheManager.set(roomKey, roomData)
 
-    return roomData;
+    return roomData
   }
 
   // Add music to queue in Redis
   async addToQueue(roomId: string, music: Music): Promise<any> {
-    const roomKey = this.getRoomKey(roomId);
-    const roomData = await this.getRoomById(roomId);
+    const roomKey = this.getRoomKey(roomId)
+    const roomData = await this.getRoomById(roomId)
 
     // Add music to the queue
-    roomData.queues.push(music);
-    await this.cacheManager.set(roomKey, roomData); // Save updated room data in Redis
+    roomData.queues.push(music)
+    await this.cacheManager.set(roomKey, roomData) // Save updated room data in Redis
 
-    return roomData;
+    return roomData
   }
 
   // Remove music from queue in Redis
   async removeFromQueue(roomId: string, musicId: string): Promise<any> {
-    const roomKey = this.getRoomKey(roomId);
-    const roomData = await this.getRoomById(roomId);
+    const roomKey = this.getRoomKey(roomId)
+    const roomData = await this.getRoomById(roomId)
 
     // Remove music from the queue
-    roomData.queues = roomData.queues.filter((music) => music.id !== musicId);
-    await this.cacheManager.set(roomKey, roomData);
+    roomData.queues = roomData.queues.filter((music) => music.id !== musicId)
+    await this.cacheManager.set(roomKey, roomData)
 
-    return roomData;
+    return roomData
   }
 
   // Increment listener count in Redis
   async incrementListener(roomId: string): Promise<any> {
-    const roomKey = this.getRoomKey(roomId);
-    const roomData = await this.getRoomById(roomId);
+    const roomKey = this.getRoomKey(roomId)
+    const roomData = await this.getRoomById(roomId)
 
-    roomData.currentListeners += 1;
-    await this.cacheManager.set(roomKey, roomData);
+    roomData.currentListeners += 1
+    await this.cacheManager.set(roomKey, roomData)
 
-    return roomData;
+    return roomData
   }
 
   // Decrement listener count in Redis
   async decrementListener(roomId: string): Promise<any> {
-    const roomKey = this.getRoomKey(roomId);
-    const roomData = await this.getRoomById(roomId);
+    const roomKey = this.getRoomKey(roomId)
+    const roomData = await this.getRoomById(roomId)
 
     if (roomData.currentListeners > 0) {
-      roomData.currentListeners -= 1;
-      await this.cacheManager.set(roomKey, roomData);
+      roomData.currentListeners -= 1
+      await this.cacheManager.set(roomKey, roomData)
     }
 
-    return roomData;
+    return roomData
   }
 
   // Change room password in Redis
   async changeRoomPassword(roomId: string, newPassword: string): Promise<any> {
-    const roomKey = this.getRoomKey(roomId);
-    const roomData = await this.getRoomById(roomId);
+    const roomKey = this.getRoomKey(roomId)
+    const roomData = await this.getRoomById(roomId)
 
-    roomData.settings.room.password = newPassword;
-    await this.cacheManager.set(roomKey, roomData);
+    roomData.settings.room.password = newPassword
+    await this.cacheManager.set(roomKey, roomData)
 
-    return roomData;
+    return roomData
+  }
+
+  async getNextMusic(roomId: string): Promise<Music | null> {
+    const roomKey = this.getRoomKey(roomId)
+    const roomData = await this.getRoomById(roomId)
+
+    if (roomData.queues.length === 0) {
+      return null
+    }
+
+    let nextMusic: Music
+
+    if (roomData.settings.music.loop) {
+      nextMusic = roomData.currentMusic
+    } else {
+      if (roomData.settings.music.shuffle) {
+        // Use Fisher-Yates shuffle for better randomization
+        for (let i = roomData.queues.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1))
+          ;[roomData.queues[i], roomData.queues[j]] = [
+            roomData.queues[j],
+            roomData.queues[i],
+          ]
+        }
+      }
+
+      nextMusic = roomData.queues.shift()
+    }
+
+    await this.cacheManager.set(roomKey, roomData)
+    return nextMusic
   }
 }

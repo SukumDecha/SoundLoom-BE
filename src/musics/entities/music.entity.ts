@@ -1,15 +1,15 @@
 export class Music {
   snippet: {
-    title: string;
-  };
+    title: string
+  }
   thumbnails: {
     [key: string]: {
-      url: string;
-      width: number;
-      height: number;
-    };
-  };
+      url: string
+      width: number
+      height: number
+    }
+  }
   id: {
-    videoId: string;
-  };
+    videoId: string
+  }
 }
