@@ -8,7 +8,7 @@ module.exports = {
   plugins: ['@typescript-eslint/eslint-plugin'],
   extends: [
     'plugin:@typescript-eslint/recommended',
-    'plugin:prettier/recommended',
+    // 'plugin:prettier/recommended',
   ],
   root: true,
   env: {
@@ -23,7 +23,6 @@ module.exports = {
     '@typescript-eslint/no-explicit-any': 'off',
     // remove comma at the end of the line
     'comma-dangle': ['error', 'always-multiline'],
-    'semi': ['error', 'never'],
-    
+    semi: ['error', 'never'],
   },
 }

@@ -12,7 +12,6 @@ export class Room {
     music: {
       loop: boolean
       shuffle: boolean
-      volume: number
     }
     room: {
       password: string

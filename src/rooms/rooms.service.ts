@@ -4,7 +4,6 @@ import { Music } from 'src/musics/entities/music.entity'
 import { CACHE_MANAGER } from '@nestjs/cache-manager'
 import { Room } from './entities/room.entity'
 import { Cache } from 'cache-manager'
-import { UpdateRoomDto } from './dto/update-room.dto'
 
 @Injectable()
 export class RoomsService {
@@ -24,7 +23,7 @@ export class RoomsService {
 
     const existRoom = await this.getRoomByHost(payload.host)
     if (existRoom) {
-      throw new Error('You already have a room')
+      throw new Error('A room already exists for this host')
     }
 
     const roomId = `${Date.now()}`
@@ -102,21 +101,26 @@ export class RoomsService {
     return rooms
   }
 
-  // Update room settings in Redis
-  async updateRoomSettings(payload: UpdateRoomDto): Promise<any> {
-    const { roomId, settings } = payload
+  // Update room in Redis
+  async updateRoom(payload: {
+    roomId: string
+    newRoom: Partial<Room>
+  }): Promise<any> {
+    const { roomId } = payload
 
     const roomKey = this.getRoomKey(roomId)
     const roomData = await this.getRoomById(roomId)
 
     // Merge the new settings with the existing ones
-    const updatedSettings = { ...roomData.settings, ...settings }
-    roomData.settings = updatedSettings
+    const updatedRoom = {
+      ...roomData,
+      ...payload.newRoom,
+    }
 
     // Save the updated room data back in Redis
-    await this.cacheManager.set(roomKey, roomData)
+    await this.cacheManager.set(roomKey, updatedRoom)
 
-    return roomData
+    return updatedRoom
   }
 
   // Add music to queue in Redis
