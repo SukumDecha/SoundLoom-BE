@@ -1,6 +1,6 @@
 import { CreateRoomDto } from './dto/create-room.dto'
 import { Injectable, Inject } from '@nestjs/common'
-import { Music } from 'src/musics/entities/music.entity'
+import { Music } from 'src/modules/musics/entities/music.entity'
 import { CACHE_MANAGER } from '@nestjs/cache-manager'
 import { Room } from './entities/room.entity'
 import { Cache } from 'cache-manager'
@@ -9,7 +9,7 @@ import { Cache } from 'cache-manager'
 export class RoomsService {
   constructor(
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache, // Inject the cache manager
-  ) {}
+  ) { }
 
   private getRoomKey(roomId: string): string {
     return `room:${roomId}` // Unique key for the room in Redis
@@ -39,7 +39,7 @@ export class RoomsService {
         music: {
           loop: false,
           shuffle: false,
-          volume: 50,
+          playing: false,
         },
         room: {
           password: payload.password || null,
@@ -128,6 +128,11 @@ export class RoomsService {
     const roomKey = this.getRoomKey(roomId)
     const roomData = await this.getRoomById(roomId)
 
+    // Check if song is already in the queue
+    if (roomData.queues.find((m) => m.id === music.id)) {
+      throw new Error('Music is already in the queue')
+    }
+
     // Add music to the queue
     roomData.queues.push(music)
     await this.cacheManager.set(roomKey, roomData) // Save updated room data in Redis
@@ -172,17 +177,17 @@ export class RoomsService {
   }
 
   // Change room password in Redis
-  async changeRoomPassword(roomId: string, newPassword: string): Promise<any> {
-    const roomKey = this.getRoomKey(roomId)
-    const roomData = await this.getRoomById(roomId)
+  // async changeRoomPassword(roomId: string, newPassword: string): Promise<any> {
+  //   const roomKey = this.getRoomKey(roomId)
+  //   const roomData = await this.getRoomById(roomId)
 
-    roomData.settings.room.password = newPassword
-    await this.cacheManager.set(roomKey, roomData)
+  //   roomData.settings.room.password = newPassword
+  //   await this.cacheManager.set(roomKey, roomData)
 
-    return roomData
-  }
+  //   return roomData
+  // }
 
-  async getNextMusic(roomId: string): Promise<Music | null> {
+  async playNextMusic(roomId: string): Promise<Music | null> {
     const roomKey = this.getRoomKey(roomId)
     const roomData = await this.getRoomById(roomId)
 
@@ -199,10 +204,10 @@ export class RoomsService {
         // Use Fisher-Yates shuffle for better randomization
         for (let i = roomData.queues.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1))
-          ;[roomData.queues[i], roomData.queues[j]] = [
-            roomData.queues[j],
-            roomData.queues[i],
-          ]
+            ;[roomData.queues[i], roomData.queues[j]] = [
+              roomData.queues[j],
+              roomData.queues[i],
+            ]
         }
       }
 

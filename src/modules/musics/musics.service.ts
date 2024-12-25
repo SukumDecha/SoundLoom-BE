@@ -8,20 +8,24 @@ export class MusicsService {
   constructor(private readonly httpService: HttpService) {}
 
   async findByQuery(query: string): Promise<any> {
+    console.log('Query:', query)
+    const encodedQuery = encodeURIComponent(query)
+    console.log('Encoded Query:', encodedQuery)
     console.log('ENV KEY', process.env.YOUTUBE_API_KEY)
+
     try {
       const { data } = await firstValueFrom(
         this.httpService.get('https://www.googleapis.com/youtube/v3/search', {
           params: {
             part: 'snippet',
             maxResults: 10,
-            q: query,
+            q: encodedQuery,
             type: 'video',
             key: process.env.YOUTUBE_API_KEY,
           },
         }),
       )
-      return data
+      return data?.items
     } catch (error) {
       if (error instanceof AxiosError) {
         // Customize the error response for better debugging

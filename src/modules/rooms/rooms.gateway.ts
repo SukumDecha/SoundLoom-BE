@@ -9,7 +9,7 @@ import { Server, Socket } from 'socket.io'
 import { RoomsService } from './rooms.service'
 import { CreateRoomDto } from './dto/create-room.dto'
 import { UpdateRoomDto } from './dto/update-room.dto'
-import { Music } from 'src/musics/entities/music.entity'
+import { Music } from 'src/modules/musics/entities/music.entity'
 
 @WebSocketGateway(4001, {
   namespace: 'rooms',
@@ -21,7 +21,7 @@ import { Music } from 'src/musics/entities/music.entity'
 export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private clientRooms: Map<string, string> = new Map() // Tracks client-to-room associations
 
-  constructor(private readonly roomService: RoomsService) {}
+  constructor(private readonly roomService: RoomsService) { }
 
   @WebSocketServer() server: Server
 
@@ -137,10 +137,10 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // })
 
       // Update to client
-      client.emit('joinedRoom', updatedRoom)
+      // client.emit('joinedRoom', updatedRoom)
 
       // Update room members with the new listener count
-      this.server.emit('roomSettingsUpdated', updatedRoom)
+      this.server.emit('roomUpdated', updatedRoom)
 
       client.emit('joinedRoom', room)
       return room
@@ -160,10 +160,10 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const updatedRoom = await this.roomService.decrementListener(roomId)
 
       // Broadcast to other room members
-      this.server.to(roomId).emit('listenerLeft', { clientId: client.id })
+      // this.server.to(roomId).emit('listenerLeft', { clientId: client.id })
 
       // Broadcast updated room to all users
-      this.server.emit('roomSettingsUpdated', updatedRoom)
+      this.server.emit('roomUpdated', updatedRoom)
 
       client.emit('roomLeft')
     } catch (error) {
@@ -172,8 +172,8 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   // Update Room Settings
-  @SubscribeMessage('updateRoomSettings')
-  async updateRoomSettings(client: Socket, payload: UpdateRoomDto) {
+  @SubscribeMessage('updateRoom')
+  async updateRoom(client: Socket, payload: UpdateRoomDto) {
     try {
       const room = await this.roomService.getRoomById(payload.roomId)
 
@@ -181,15 +181,15 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
         roomId: payload.roomId,
         newRoom: {
           ...room,
-          settings: { ...room.settings, ...payload.settings },
+          ...payload.updatedRoom,
         },
       })
 
       // Broadcast settings update to all room members
-      this.server.to(payload.roomId).emit('roomSettingsUpdated', updatedRoom)
+      // this.server.to(payload.roomId).emit('roomUpdated', updatedRoom)
 
       // Broadcast updated room to all users
-      this.server.emit('roomSettingsUpdated', updatedRoom)
+      this.server.emit('roomUpdated', updatedRoom)
 
       return updatedRoom
     } catch (error) {
@@ -210,7 +210,7 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.server.to(payload.roomId).emit('queueUpdated', updatedRoom)
 
       // Broadcast updated room to all users
-      this.server.emit('roomSettingsUpdated', updatedRoom)
+      this.server.emit('roomUpdated', updatedRoom)
 
       return updatedRoom
     } catch (error) {
@@ -234,7 +234,7 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.server.to(payload.roomId).emit('queueUpdated', updatedRoom)
 
       // Broadcast updated room to all users
-      this.server.emit('roomSettingsUpdated', updatedRoom)
+      this.server.emit('roomUpdated', updatedRoom)
 
       return updatedRoom
     } catch (error) {
@@ -242,11 +242,10 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  // Get Next Music
-  @SubscribeMessage('getNextMusic')
-  async getNextMusic(client: Socket, roomId: string) {
+  @SubscribeMessage('playNextMusic')
+  async playNextMusic(client: Socket, roomId: string) {
     try {
-      const nextMusic = await this.roomService.getNextMusic(roomId)
+      const nextMusic = await this.roomService.playNextMusic(roomId)
       const room = await this.roomService.getRoomById(roomId)
 
       // Set next music as current music
@@ -267,26 +266,26 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   // Change Room Password
-  @SubscribeMessage('changeRoomPassword')
-  async changeRoomPassword(
-    client: Socket,
-    payload: { roomId: string; newPassword: string },
-  ) {
-    try {
-      const updatedRoom = await this.roomService.changeRoomPassword(
-        payload.roomId,
-        payload.newPassword,
-      )
+  // @SubscribeMessage('changeRoomPassword')
+  // async changeRoomPassword(
+  //   client: Socket,
+  //   payload: { roomId: string; newPassword: string },
+  // ) {
+  //   try {
+  //     const updatedRoom = await this.roomService.changeRoomPassword(
+  //       payload.roomId,
+  //       payload.newPassword,
+  //     )
 
-      // Broadcast password change to all room members
-      this.server.to(payload.roomId).emit('roomPasswordChanged', updatedRoom)
+  //     // Broadcast password change to all room members
+  //     this.server.to(payload.roomId).emit('roomPasswordChanged', updatedRoom)
 
-      // Broadcast updated room to all users
-      this.server.emit('roomSettingsUpdated', updatedRoom)
+  //     // Broadcast updated room to all users
+  //     this.server.emit('roomSettingsUpdated', updatedRoom)
 
-      return updatedRoom
-    } catch (error) {
-      client.emit('error', { message: error.message })
-    }
-  }
+  //     return updatedRoom
+  //   } catch (error) {
+  //     client.emit('error', { message: error.message })
+  //   }
+  // }
 }

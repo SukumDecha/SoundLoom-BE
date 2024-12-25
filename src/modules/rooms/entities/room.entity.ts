@@ -1,4 +1,4 @@
-import { Music } from 'src/musics/entities/music.entity'
+import { Music } from 'src/modules/musics/entities/music.entity'
 
 export class Room {
   id?: string
@@ -12,6 +12,7 @@ export class Room {
     music: {
       loop: boolean
       shuffle: boolean
+      playing: boolean
     }
     room: {
       password: string
