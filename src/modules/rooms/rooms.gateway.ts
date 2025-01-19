@@ -37,10 +37,12 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const roomId = this.clientRooms.get(client.id)
 
     if (roomId) {
-      await this.roomService.decrementListener(roomId)
+      const updatedRoom = await this.roomService.decrementListener(roomId)
 
-      // Notify other clients in the room
-      // this.server.to(roomId).emit('listenerLeft', { clientId: client.id })
+      await this.roomService.saveOnExit(roomId)
+
+      // Update room members with the new listener count
+      this.server.emit('roomUpdated', updatedRoom)
 
       // Remove client from the tracking map
       this.clientRooms.delete(client.id)
@@ -53,11 +55,11 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
     try {
       const roomId = await this.roomService.createRoom(payload)
 
-      // Join the room
+
       client.join(roomId)
 
       client.emit('roomCreated', { roomId })
-      // Update all clients with the new room
+
       this.server.emit('newRoomCreated', { roomId })
       return { roomId }
     } catch (error) {
@@ -71,10 +73,8 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
     try {
       await this.roomService.deleteRoom(roomId)
 
-      // Update all clients with the deleted room
       this.server.to(roomId).emit('roomDeleted', { roomId })
 
-      // Remove all clients from the room
       this.server.emit('roomDeleted', roomId)
     } catch (error) {
       client.emit('error', { message: error.message })
@@ -86,7 +86,6 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
     try {
       await this.roomService.deleteAllRooms()
 
-      // Update all clients with the deleted room
       this.server.emit('allRoomsDeleted')
     } catch (error) {
       client.emit('error', { message: error.message })
@@ -99,6 +98,7 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
     try {
       const rooms = await this.roomService.getAllRooms()
       client.emit('allRooms', rooms)
+
       return rooms
     } catch (error) {
       client.emit('error', { message: error.message })
@@ -158,6 +158,8 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.clientRooms.delete(client.id)
 
       const updatedRoom = await this.roomService.decrementListener(roomId)
+
+      await this.roomService.saveOnExit(roomId)
 
       // Broadcast to other room members
       // this.server.to(roomId).emit('listenerLeft', { clientId: client.id })
@@ -242,28 +244,96 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  @SubscribeMessage('playNextMusic')
-  async playNextMusic(client: Socket, roomId: string) {
+  // Clear Queue
+  @SubscribeMessage('clearQueue')
+  async clearQueue(client: Socket, roomId: string) {
     try {
-      const nextMusic = await this.roomService.playNextMusic(roomId)
-      const room = await this.roomService.getRoomById(roomId)
+      const updatedRoom = await this.roomService.clearQueue(roomId)
 
-      // Set next music as current music
-      const updatedRoom = await this.roomService.updateRoom({
-        roomId,
-        newRoom: { ...room, currentMusic: nextMusic },
-      })
-      // Broadcast next music to all room members
-      this.server.to(roomId).emit('nextMusicReady', nextMusic)
+      // Broadcast queue update to all room members
+      this.server.to(roomId).emit('queueUpdated', updatedRoom)
 
       // Broadcast updated room to all users
-      this.server.emit('roomSettingsUpdated', updatedRoom)
+      this.server.emit('roomUpdated', updatedRoom)
 
-      return nextMusic
+      return updatedRoom
     } catch (error) {
       client.emit('error', { message: error.message })
     }
   }
+
+  @SubscribeMessage('playNextMusic')
+  async playNextMusic(client: Socket, roomId: string) {
+    try {
+      const updatedRoom = await this.roomService.playNextMusic(roomId)
+
+      // Broadcast next music to all room members
+      this.server.to(roomId).emit('nextMusicReady', updatedRoom)
+
+      // Broadcast updated room to all users
+      this.server.emit('roomUpdated', updatedRoom)
+
+      return updatedRoom
+    } catch (error) {
+      client.emit('error', { message: error.message })
+    }
+  }
+
+  // @SubscribeMessage('startPlaying')
+  // async startPlaying(client: Socket, roomId: string) {
+  //   try {
+  //     const updatedRoom = await this.roomService.startPlaying(roomId)
+
+  //     console.log("startPlaying", updatedRoom.settings.music.startTimestamp)
+
+  //     // Broadcast to all clients in the room
+  //     this.server.to(roomId).emit('musicStarted', { startTimestamp: updatedRoom.settings.music.startTimestamp })
+
+  //     return updatedRoom
+  //   } catch (error) {
+  //     client.emit('error', { message: error.message })
+  //   }
+  // }
+
+  // @SubscribeMessage('pausePlaying')
+  // async pausePlaying(client: Socket, roomId: string) {
+  //   try {
+  //     const updatedRoom = await this.roomService.pausePlaying(roomId)
+
+  //     // Broadcast to all clients in the room
+  //     this.server.to(roomId).emit('musicPaused')
+
+  //     return updatedRoom
+  //   } catch (error) {
+  //     client.emit('error', { message: error.message })
+  //   }
+  // }
+
+  @SubscribeMessage('updatePlayback')
+  async updatePlayback(client: Socket, payload: {
+    roomId: string;
+    currentTime: number;
+    isPlaying: boolean;
+  }) {
+    try {
+      const updatedRoom = await this.roomService.updatePlayback(payload.roomId, payload.currentTime, payload.isPlaying)
+
+      // Broadcast to all clients in room except sender
+      this.server.emit('roomUpdated', updatedRoom)
+
+      this.server.to(payload.roomId).emit('playbackUpdated', {
+        currentTime: payload.currentTime,
+        isPlaying: payload.isPlaying,
+        startTimestamp: updatedRoom.settings.music.startTimestamp,
+      })
+
+
+      return updatedRoom.settings.music.startTimestamp
+    } catch (error) {
+      client.emit('error', { message: error.message })
+    }
+  }
+
 
   // Change Room Password
   // @SubscribeMessage('changeRoomPassword')

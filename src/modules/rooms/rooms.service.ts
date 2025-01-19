@@ -40,6 +40,7 @@ export class RoomsService {
           loop: false,
           shuffle: false,
           playing: false,
+          startTimestamp: null,
         },
         room: {
           password: payload.password || null,
@@ -65,7 +66,7 @@ export class RoomsService {
   }
 
   // Get room by ID from Redis
-  async getRoomById(roomId: string): Promise<any> {
+  async getRoomById(roomId: string): Promise<Room | null> {
     const roomKey = this.getRoomKey(roomId)
     const roomData = (await this.cacheManager.get(roomKey)) as Room
 
@@ -146,7 +147,17 @@ export class RoomsService {
     const roomData = await this.getRoomById(roomId)
 
     // Remove music from the queue
-    roomData.queues = roomData.queues.filter((music) => music.id !== musicId)
+    roomData.queues = roomData.queues.filter((music: Music) => music.id.videoId !== musicId)
+    await this.cacheManager.set(roomKey, roomData)
+
+    return roomData
+  }
+
+  async clearQueue(roomId: string): Promise<any> {
+    const roomKey = this.getRoomKey(roomId)
+    const roomData = await this.getRoomById(roomId)
+
+    roomData.queues = []
     await this.cacheManager.set(roomKey, roomData)
 
     return roomData
@@ -164,7 +175,7 @@ export class RoomsService {
   }
 
   // Decrement listener count in Redis
-  async decrementListener(roomId: string): Promise<any> {
+  async decrementListener(roomId: string): Promise<Room | null> {
     const roomKey = this.getRoomKey(roomId)
     const roomData = await this.getRoomById(roomId)
 
@@ -187,7 +198,7 @@ export class RoomsService {
   //   return roomData
   // }
 
-  async playNextMusic(roomId: string): Promise<Music | null> {
+  async playNextMusic(roomId: string): Promise<Room | null> {
     const roomKey = this.getRoomKey(roomId)
     const roomData = await this.getRoomById(roomId)
 
@@ -214,7 +225,51 @@ export class RoomsService {
       nextMusic = roomData.queues.shift()
     }
 
+    roomData.currentMusic = nextMusic
+
     await this.cacheManager.set(roomKey, roomData)
-    return nextMusic
+    return roomData
+  }
+
+  async updatePlayback(
+    roomId: string,
+    currentTime: number,
+    isPlaying: boolean,
+  ) {
+    const startTimestamp = Date.now() - (currentTime * 1000)
+
+    const roomKey = this.getRoomKey(roomId)
+    const roomData = await this.getRoomById(roomId)
+
+    roomData.settings.music.playing = isPlaying
+    roomData.settings.music.startTimestamp = isPlaying ? startTimestamp : null
+
+    await this.cacheManager.set(roomKey, roomData)
+    return roomData
+  }
+
+  async saveOnExit(roomId: string) {
+    const roomKey = this.getRoomKey(roomId)
+    const roomData = await this.getRoomById(roomId)
+
+    if (roomData.currentListeners === 0) {
+      // Save playback state when the room becomes empty
+      const currentTime = roomData.settings.music.playing
+        ? (Date.now() - roomData.settings.music.startTimestamp) / 1000
+        : 0
+
+      roomData.settings.music.startTimestamp = currentTime
+      roomData.settings.music.playing = false
+
+      console.log(`Last user left room ${roomId}. Playback saved at ${currentTime}s.`)
+      await this.cacheManager.set(roomKey, roomData)
+
+      setTimeout(async () => {
+        if (roomData && roomData.currentListeners === 0) {
+          await this.deleteRoom(roomId)
+          console.log(`Room ${roomId} deleted due to inactivity.`)
+        }
+      }, 60000) // Delete room after 60 seconds of no activity
+    }
   }
 }

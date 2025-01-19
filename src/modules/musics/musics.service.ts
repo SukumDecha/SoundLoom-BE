@@ -5,13 +5,13 @@ import { AxiosError } from 'axios'
 
 @Injectable()
 export class MusicsService {
-  constructor(private readonly httpService: HttpService) {}
+  constructor(private readonly httpService: HttpService) { }
 
   async findByQuery(query: string): Promise<any> {
-    console.log('Query:', query)
+    // console.log('Query:', query)
     const encodedQuery = encodeURIComponent(query)
-    console.log('Encoded Query:', encodedQuery)
-    console.log('ENV KEY', process.env.YOUTUBE_API_KEY)
+    // console.log('Encoded Query:', encodedQuery)
+    // console.log('ENV KEY', process.env.YOUTUBE_API_KEY)
 
     try {
       const { data } = await firstValueFrom(
@@ -25,6 +25,7 @@ export class MusicsService {
           },
         }),
       )
+
       return data?.items
     } catch (error) {
       if (error instanceof AxiosError) {

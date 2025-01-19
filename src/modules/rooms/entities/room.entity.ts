@@ -13,6 +13,7 @@ export class Room {
       loop: boolean
       shuffle: boolean
       playing: boolean
+      startTimestamp: number | null; // Add this field
     }
     room: {
       password: string
