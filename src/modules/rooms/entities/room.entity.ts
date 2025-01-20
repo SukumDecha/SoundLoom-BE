@@ -7,6 +7,7 @@ export class Room {
   currentListeners: number
   currentMusic: Music
   queues: Music[]
+  previousMusic: Music[]
 
   settings: {
     music: {

@@ -34,18 +34,22 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
     console.log('Client disconnected', client.id)
 
     // Optional: Remove listener from room if applicable
-    const roomId = this.clientRooms.get(client.id)
+    try {
+      const roomId = this.clientRooms.get(client.id)
 
-    if (roomId) {
-      const updatedRoom = await this.roomService.decrementListener(roomId)
+      if (roomId) {
+        const updatedRoom = await this.roomService.decrementListener(roomId)
 
-      await this.roomService.saveOnExit(roomId)
+        await this.roomService.saveOnExit(roomId)
 
-      // Update room members with the new listener count
-      this.server.emit('roomUpdated', updatedRoom)
+        // Update room members with the new listener count
+        this.server.emit('roomUpdated', updatedRoom)
 
-      // Remove client from the tracking map
-      this.clientRooms.delete(client.id)
+        // Remove client from the tracking map
+        this.clientRooms.delete(client.id)
+      }
+    } catch (error) {
+      console.error('Error on disconnect', error)
     }
   }
 
@@ -333,7 +337,6 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.emit('error', { message: error.message })
     }
   }
-
 
   // Change Room Password
   // @SubscribeMessage('changeRoomPassword')

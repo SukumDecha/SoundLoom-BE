@@ -35,6 +35,7 @@ export class RoomsService {
       currentListeners: 0,
       currentMusic: null,
       queues: [],
+      previousMusic: [],
       settings: {
         music: {
           loop: false,
@@ -71,7 +72,8 @@ export class RoomsService {
     const roomData = (await this.cacheManager.get(roomKey)) as Room
 
     if (!roomData || !roomData.host) {
-      throw new Error(`Room with ID ${roomId} not found`)
+      // throw new Error(`Room with ID ${roomId} not found`)
+      return null
     }
 
     return roomData
@@ -203,6 +205,9 @@ export class RoomsService {
     const roomData = await this.getRoomById(roomId)
 
     if (roomData.queues.length === 0) {
+      roomData.currentMusic = null
+      roomData.settings.music.playing = false
+      roomData.settings.music.startTimestamp = null
       return null
     }
 
@@ -248,12 +253,32 @@ export class RoomsService {
     return roomData
   }
 
+  async continuePlayback(
+    roomId: string,
+    isPlaying: boolean,
+  ) {
+
+    const roomKey = this.getRoomKey(roomId)
+    const roomData = await this.getRoomById(roomId)
+
+    roomData.settings.music.playing = isPlaying
+
+    if (roomData.settings.music.startTimestamp === null) {
+      roomData.settings.music.startTimestamp = Date.now()
+    }
+
+    await this.cacheManager.set(roomKey, roomData)
+    return roomData
+  }
+
   async saveOnExit(roomId: string) {
     const roomKey = this.getRoomKey(roomId)
     const roomData = await this.getRoomById(roomId)
 
+    console.log("Saving playback state on exit")
     if (roomData.currentListeners === 0) {
       // Save playback state when the room becomes empty
+
       const currentTime = roomData.settings.music.playing
         ? (Date.now() - roomData.settings.music.startTimestamp) / 1000
         : 0
@@ -265,6 +290,8 @@ export class RoomsService {
       await this.cacheManager.set(roomKey, roomData)
 
       setTimeout(async () => {
+        const roomData = await this.getRoomById(roomId)
+
         if (roomData && roomData.currentListeners === 0) {
           await this.deleteRoom(roomId)
           console.log(`Room ${roomId} deleted due to inactivity.`)
