@@ -66,14 +66,19 @@ export class RoomsService {
     }
   }
 
-  // Get room by ID from Redis
   async getRoomById(roomId: string): Promise<Room | null> {
     const roomKey = this.getRoomKey(roomId)
     const roomData = (await this.cacheManager.get(roomKey)) as Room
 
     if (!roomData || !roomData.host) {
-      // throw new Error(`Room with ID ${roomId} not found`)
       return null
+    }
+
+    if (roomData.settings.music.playing && roomData.settings.music.startTimestamp) {
+      const elapsedTime = (Date.now() - roomData.settings.music.startTimestamp) / 1000
+
+      roomData.settings.music.startTimestamp = Date.now() - (elapsedTime * 1000)
+      await this.cacheManager.set(roomKey, roomData)
     }
 
     return roomData
@@ -137,7 +142,12 @@ export class RoomsService {
     }
 
     // Add music to the queue
-    roomData.queues.push(music)
+    if (!roomData.currentMusic) {
+      roomData.currentMusic = music
+    } else {
+      roomData.queues.push(music)
+    }
+
     await this.cacheManager.set(roomKey, roomData) // Save updated room data in Redis
 
     return roomData
@@ -200,14 +210,38 @@ export class RoomsService {
   //   return roomData
   // }
 
+  async playPreviousMusic(roomId: string): Promise<Room | null> {
+    const roomKey = this.getRoomKey(roomId)
+    const roomData = await this.getRoomById(roomId)
+
+    if (roomData.previousMusic.length === 0) {
+      return null
+    }
+
+    const previousMusic = roomData.previousMusic.pop()
+    roomData.queues.unshift(roomData.currentMusic)
+    roomData.currentMusic = previousMusic
+
+    await this.cacheManager.set(roomKey, roomData)
+    return roomData
+  }
+
   async playNextMusic(roomId: string): Promise<Room | null> {
     const roomKey = this.getRoomKey(roomId)
     const roomData = await this.getRoomById(roomId)
+
+    if (!roomData.settings.music.loop && roomData.currentMusic) {
+      roomData.previousMusic.push(roomData.currentMusic)
+    }
+
+    console.log("Queue length: ", roomData.queues.length)
 
     if (roomData.queues.length === 0) {
       roomData.currentMusic = null
       roomData.settings.music.playing = false
       roomData.settings.music.startTimestamp = null
+
+      await this.cacheManager.set(roomKey, roomData)
       return null
     }
 
@@ -240,15 +274,21 @@ export class RoomsService {
     roomId: string,
     currentTime: number,
     isPlaying: boolean,
+
   ) {
-    const startTimestamp = Date.now() - (currentTime * 1000)
 
     const roomKey = this.getRoomKey(roomId)
     const roomData = await this.getRoomById(roomId)
 
-    roomData.settings.music.playing = isPlaying
-    roomData.settings.music.startTimestamp = isPlaying ? startTimestamp : null
+    // Only update timestamp when starting playback
+    if (isPlaying) {
+      roomData.settings.music.startTimestamp = Date.now() - (currentTime * 1000)
+    } else if (!isPlaying) {
+      // Store the current position when pausing
+      roomData.settings.music.startTimestamp = currentTime
+    }
 
+    roomData.settings.music.playing = isPlaying
     await this.cacheManager.set(roomKey, roomData)
     return roomData
   }
@@ -265,6 +305,20 @@ export class RoomsService {
 
     if (roomData.settings.music.startTimestamp === null) {
       roomData.settings.music.startTimestamp = Date.now()
+    }
+
+    await this.cacheManager.set(roomKey, roomData)
+    return roomData
+  }
+
+  async handleSeek(roomId: string, currentTime: number) {
+    const roomKey = this.getRoomKey(roomId)
+    const roomData = await this.getRoomById(roomId)
+
+    if (roomData.settings.music.playing) {
+      roomData.settings.music.startTimestamp = Date.now() - (currentTime * 1000)
+    } else {
+      roomData.settings.music.startTimestamp = currentTime
     }
 
     await this.cacheManager.set(roomKey, roomData)
@@ -292,6 +346,7 @@ export class RoomsService {
       setTimeout(async () => {
         const roomData = await this.getRoomById(roomId)
 
+        console.log("Room data: ", roomData)
         if (roomData && roomData.currentListeners === 0) {
           await this.deleteRoom(roomId)
           console.log(`Room ${roomId} deleted due to inactivity.`)

@@ -266,13 +266,23 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
+  @SubscribeMessage('playPreviousMusic')
+  async playPreviousMusic(client: Socket, roomId: string) {
+    try {
+      const updatedRoom = await this.roomService.playPreviousMusic(roomId)
+
+      this.server.emit('roomUpdated', updatedRoom)
+
+      return updatedRoom
+    } catch (error) {
+      client.emit('error', { message: error.message })
+    }
+  }
+
   @SubscribeMessage('playNextMusic')
   async playNextMusic(client: Socket, roomId: string) {
     try {
       const updatedRoom = await this.roomService.playNextMusic(roomId)
-
-      // Broadcast next music to all room members
-      this.server.to(roomId).emit('nextMusicReady', updatedRoom)
 
       // Broadcast updated room to all users
       this.server.emit('roomUpdated', updatedRoom)
@@ -283,36 +293,6 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  // @SubscribeMessage('startPlaying')
-  // async startPlaying(client: Socket, roomId: string) {
-  //   try {
-  //     const updatedRoom = await this.roomService.startPlaying(roomId)
-
-  //     console.log("startPlaying", updatedRoom.settings.music.startTimestamp)
-
-  //     // Broadcast to all clients in the room
-  //     this.server.to(roomId).emit('musicStarted', { startTimestamp: updatedRoom.settings.music.startTimestamp })
-
-  //     return updatedRoom
-  //   } catch (error) {
-  //     client.emit('error', { message: error.message })
-  //   }
-  // }
-
-  // @SubscribeMessage('pausePlaying')
-  // async pausePlaying(client: Socket, roomId: string) {
-  //   try {
-  //     const updatedRoom = await this.roomService.pausePlaying(roomId)
-
-  //     // Broadcast to all clients in the room
-  //     this.server.to(roomId).emit('musicPaused')
-
-  //     return updatedRoom
-  //   } catch (error) {
-  //     client.emit('error', { message: error.message })
-  //   }
-  // }
-
   @SubscribeMessage('updatePlayback')
   async updatePlayback(client: Socket, payload: {
     roomId: string;
@@ -320,16 +300,21 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
     isPlaying: boolean;
   }) {
     try {
-      const updatedRoom = await this.roomService.updatePlayback(payload.roomId, payload.currentTime, payload.isPlaying)
+      const updatedRoom = await this.roomService.updatePlayback(
+        payload.roomId,
+        payload.currentTime,
+        payload.isPlaying
+      )
 
-      // Broadcast to all clients in room except sender
-      this.server.emit('roomUpdated', updatedRoom)
-
+      // Broadcast to all clients in room including sender
       this.server.to(payload.roomId).emit('playbackUpdated', {
         currentTime: payload.currentTime,
         isPlaying: payload.isPlaying,
         startTimestamp: updatedRoom.settings.music.startTimestamp,
       })
+
+      // Update room state for all users
+      this.server.emit('roomUpdated', updatedRoom)
 
 
       return updatedRoom.settings.music.startTimestamp
