@@ -1,0 +1,43 @@
+# Node-related files
+node_modules
+pnpm-lock.yaml # Exclude if you generate it dynamically, otherwise keep it
+npm-debug.log*
+yarn.lock
+
+# Build artifacts
+.next
+dist
+out
+
+# Logs
+logs
+*.log
+*.log.*
+
+# Local environment files
+# .env.local
+# .env.development
+# .env.test
+# .env.production.local
+
+# Docker-related files
+Dockerfile
+docker-compose.yml
+docker-compose.override.yml
+
+# IDE-specific files
+.idea
+.vscode
+*.swp
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Git-related files
+.git
+.gitignore
+
+# Temporary files
+*.tmp
+*.temp
