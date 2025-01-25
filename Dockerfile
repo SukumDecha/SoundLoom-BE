@@ -12,7 +12,7 @@ RUN pnpm install --frozen-lockfile
 
 # Copy source code and environment variables
 COPY . .
-COPY .env .env
+COPY .env.production .env
 
 # Build the NestJS app
 RUN pnpm build
