@@ -285,6 +285,7 @@ export class RoomsService {
       roomData.settings.music.startTimestamp = Date.now() - (currentTime * 1000)
     } else if (!isPlaying) {
       // Store the current position when pausing
+
       roomData.settings.music.startTimestamp = currentTime
     }
 
